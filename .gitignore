@@ -21,3 +21,6 @@ mpi2/*
 debug/*
 data/*
 doc/doxygenOutput
+OpenViewMin-env/*
+*.ipynb*
+__pycache__/*
