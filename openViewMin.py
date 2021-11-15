@@ -313,6 +313,33 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             init_slider_int=30
         )
 
+
+
+    def setup_boundaries(self):
+        boundary_vis_kwargs = {
+            "pbr":True,
+            "metallic":1,
+            "roughness":0.5,
+            "diffuse":1,
+            "smooth_shading":True
+        }
+
+        actor_name="boundaries (all)"
+        self.colors[actor_name] = self.settings["boundaries_color"]
+        self.refresh_functions[actor_name] = lambda: self.update_isosurface(
+            actor_name, dataset_name="nematic_sites", contour_values=[0.5], **boundary_vis_kwargs,
+        )
+        self.refresh_functions[actor_name]()
+
+
+        for i in range(1,self.num_boundaries+1):
+            bdy = f"boundary_{i}"
+            self.colors[bdy] = self.settings["boundaries_color"]
+            self.refresh_functions[bdy] = lambda: self.update_isosurface(
+                bdy, dataset_name=bdy, contour_values=[0.5], **boundary_vis_kwargs)
+            self.refresh_functions[bdy]()
+            self.isosurfaces[bdy]["actor"].SetVisibility(0)
+
     def setup_QSliders(self):
         self.QSliders_toolbar = qw.QToolBar('QSliders')
         self.QSliders_toolbar.setFixedWidth(150)
@@ -480,52 +507,6 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
         self.app_window.addToolBar(Qt.Qt.LeftToolBarArea, self.toolbars["director"])
 
-
-    def setup_boundaries(self):
-        boundary_vis_kwargs = {
-            "pbr":True,
-            "metallic":1,
-            "roughness":0.5,
-            "diffuse":1,
-            "smooth_shading":True
-        }
-
-        actor_name="boundaries (all)"
-        self.colors[actor_name] = self.settings["boundaries_color"]
-        self.refresh_functions[actor_name] = lambda: self.update_isosurface(
-            "nematic_sites", actor_name=actor_name, **boundary_vis_kwargs
-        )
-        self.refresh_functions[actor_name]()
-
-
-        for i in range(1,self.num_boundaries+1):
-            bdy = f"boundary_{i}"
-            self.colors[bdy] = self.settings["boundaries_color"]
-            self.refresh_functions[bdy] = lambda: self.update_isosurface(
-                bdy, actor_name=bdy, **boundary_vis_kwargs)
-            self.refresh_functions[bdy]()
-            self.isosurfaces[bdy].SetVisibility(0)
-
-    def update_isosurface(self, dataset_name, actor_name = None, contour_value=0.5, color=None, **kwargs):
-        if actor_name is None:
-            actor_name = dataset_name + "_isosurface"
-        if color is None:
-            color = self.colors[actor_name]
-        kwargs["name"] = actor_name
-        if color in self.scalar_fields():
-            kwargs["scalars"] = color
-            kwargs["show_scalar_bar"] = True
-            kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
-
-        else:
-            kwargs["color"] = color
-            kwargs["show_scalar_bar"] = False
-        self.isosurfaces[actor_name] = self.add_mesh(
-            self.fullmesh.contour([contour_value], scalars=dataset_name),
-            **kwargs
-        )
-        if kwargs["show_scalar_bar"]:
-            self.standardize_scalar_bar(self.scalar_bars[kwargs["scalars"]])
 
     def setup_director_slice_widget(self):
         widget_name="director_slice_widget"
@@ -876,6 +857,104 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             )
         return return_function
 
+    def update_isosurface(self, actor_name, dataset_name = None, contour_values=None, **contour_kwargs):
+
+
+        if not actor_name in self.isosurfaces.keys():
+            self.isosurfaces[actor_name] = dict(
+                contour_kwargs = dict(
+                    name=actor_name
+                )
+            )
+        isosurface_dict = self.isosurfaces[actor_name]
+
+
+        if dataset_name is None:
+            if not "dataset_name" in isosurface_dict.keys():
+                print("Error: no dataset_name passed to update_isosurface")
+                raise AttributeError
+        else:
+            isosurface_dict["dataset_name"] = dataset_name
+
+        if contour_values is None:
+            if not "contour_values" in isosurface_dict.keys():
+                isosurface_dict["contour_values"] = [0.5]
+            # else keep existing contour values
+        else:
+            if type(contour_values) is not list:
+                contour_values = [contour_values]
+            isosurface_dict["contour_values"] = contour_values
+
+        # if "actor_name" in isosurface_dict.keys():
+        #     actor_name = isosurface_dict["actor_name"]
+        # else:
+        #     actor_name = isosurface_dict["dataset_name"] + "_isosurface"
+
+        if "color" in contour_kwargs.keys():
+            color = contour_kwargs["color"]
+        else:
+            color = None
+        if color is None:
+            if actor_name in self.colors.keys():
+                color = self.colors[actor_name]
+            else:
+                color = self.settings["default_isosurface_color"]
+        self.colors[actor_name] = color
+
+        if color in self.scalar_fields(): # "color" is really "scalars"
+            contour_kwargs["scalars"] = color
+            contour_kwargs["show_scalar_bar"] = True
+            contour_kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
+            contour_kwargs["color"] = None
+        else: # "color" is actually a color
+            contour_kwargs["color"] = color
+            contour_kwargs["scalars"] = None
+            contour_kwargs["show_scalar_bar"] = False
+
+        for key in contour_kwargs.keys():
+            self.isosurfaces[actor_name]["contour_kwargs"][key] = contour_kwargs[key]
+
+
+        # if color is None:
+        #     # check if we've already assigned a color to this isosurface
+        #     if actor_name in self.colors.keys():
+        #         color = self.colors[actor_name]
+        #     else:
+        #         color = self.settings["default_isosurface_color"]
+        #         self.colors[actor_name] = color
+        #     contour_kwargs["color"] = color
+        # elif color in self.scalar_fields():
+        #     contour_kwargs["scalars"] = color
+        #     contour_kwargs["show_scalar_bar"] = True
+        #     contour_kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
+        # else:
+        #     contour_kwargs["color"] = color
+        #     contour_kwargs["scalars"] = None
+        #     contour_kwargs["show_scalar_bar"] = False
+
+        if "scalar_bar" in isosurface_dict.keys():
+            self.remove_scalar_bar(
+                isosurface_dict["scalar_bar"].GetTitle()
+            )
+        self.renderer.actors[actor_name] = self.add_mesh(
+            self.fullmesh.contour(
+                isosurface_dict["contour_values"],
+                scalars=isosurface_dict["dataset_name"]
+            ),
+            **self.isosurfaces[actor_name]["contour_kwargs"]
+        )
+        isosurface_dict["actor"] = self.renderer.actors[actor_name]
+            # dataset_name = dataset_name,
+            # contour_values = contour_value,
+            # color=color
+
+        if isosurface_dict["contour_kwargs"]["show_scalar_bar"]:
+            scalar_bar = self.scalar_bars[
+                isosurface_dict["contour_kwargs"]["scalars"]
+            ]
+            self.standardize_scalar_bar(scalar_bar)
+            isosurface_dict["scalar_bar"] = scalar_bar
+
     def generic_slider_callback(self, actor_name, scalars, contour_value,
         color=None, mesh_color_scalars=None, clim=None, cmap=None):
         """generic callback function for slider controlling isosurfaces"""
@@ -890,47 +969,62 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         }
         contour_value = max(np.min(self.fullmesh[scalars]), contour_value)
         contour_value = min(np.max(self.fullmesh[scalars]), contour_value)
-
-        if color is None and mesh_color_scalars is None:
-            if actor_name in self.colors.keys():
-                color = self.colors[actor_name]
-            else:
-                color = self.settings["default_isosurface_color"]
-                self.colors[actor_name] = color
-        # check if "color" was mean to be "mesh_color_scalars"
-        if color in self.scalar_fields():
-            mesh_color_scalars = color
-            color = None
-
+        # kwargs["contour_values"] = [contour_value]
+        # kwargs["actor_name"] = actor_name
+        # kwargs["dataset_name"] = scalars
+        # if color is None and mesh_color_scalars is None:
+        #     if actor_name in self.colors.keys():
+        #         color = self.colors[actor_name]
+        #     else:
+        #         color = self.settings["default_isosurface_color"]
+        #         self.colors[actor_name] = color
         if mesh_color_scalars is not None:
-            kwargs["scalars"] = mesh_color_scalars
-            kwargs["show_scalar_bar"] = True
-            kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
-            kwargs["clim"] = clim
-            if cmap is not None:
-                kwargs["cmap"] = cmap
-            color = None
-        kwargs["color"] = color
+            kwargs["color"] = mesh_color_scalars
+        else:
+            kwargs["color"] = color
         try:
-            self.renderer.actors[actor_name] = self.add_mesh(
-                self.fullmesh.contour(
-                    [contour_value], scalars=scalars
-                ), **kwargs
-            )
-            actor = self.renderer.actors[actor_name]
-            if actor_name in self.visibility_checkboxes.keys():
-                checkbox = self.visibility_checkboxes[actor_name]
-                checkbox.toggled.disconnect()
-                checkbox.toggled.connect(
-                    lambda : actor.SetVisibility(1 - actor.GetVisibility())
-                )
-                checkbox.toggled.connect(self.set_checkbox_symbol(checkbox))
-
-            if kwargs["show_scalar_bar"]:
-                scalar_bar_name = kwargs["scalars"]
-                scalar_bar = self.scalar_bars[scalar_bar_name]
-                # self.addalar_bar(scalar_bar) #!!!
-                self.colorbars[actor_name] = scalar_bar_name
+            self.update_isosurface(actor_name, dataset_name=scalars, contour_values=[contour_value], **kwargs)
+        #
+        # if color is None and mesh_color_scalars is None:
+        #     if actor_name in self.colors.keys():
+        #         color = self.colors[actor_name]
+        #     else:
+        #         color = self.settings["default_isosurface_color"]
+        #         self.colors[actor_name] = color
+        # # check if "color" was mean to be "mesh_color_scalars"
+        # if color in self.scalar_fields():
+        #     mesh_color_scalars = color
+        #     color = None
+        #
+        # if mesh_color_scalars is not None:
+        #     kwargs["scalars"] = mesh_color_scalars
+        #     kwargs["show_scalar_bar"] = True
+        #     kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
+        #     kwargs["clim"] = clim
+        #     if cmap is not None:
+        #         kwargs["cmap"] = cmap
+        #     color = None
+        # kwargs["color"] = color
+        # try:
+        #     self.renderer.actors[actor_name] = self.add_mesh(
+        #         self.fullmesh.contour(
+        #             [contour_value], scalars=scalars
+        #         ), **kwargs
+        #     )
+        #     actor = self.renderer.actors[actor_name]
+        #     if actor_name in self.visibility_checkboxes.keys():
+        #         checkbox = self.visibility_checkboxes[actor_name]
+        #         checkbox.toggled.disconnect()
+        #         checkbox.toggled.connect(
+        #             lambda : actor.SetVisibility(1 - actor.GetVisibility())
+        #         )
+        #         checkbox.toggled.connect(self.set_checkbox_symbol(checkbox))
+        #
+        #     if kwargs["show_scalar_bar"]:
+        #         scalar_bar_name = kwargs["scalars"]
+        #         scalar_bar = self.scalar_bars[scalar_bar_name]
+        #         self.standardize_scalar_bar(scalar_bar)
+        #         self.colorbars[actor_name] = scalar_bar_name
         except ValueError: # ignore "empty mesh" warnings
             """
             When all values are the same, such as typically for "order" in the first frame,
@@ -985,8 +1079,11 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         self.renderer.actors[actor_name].SetVisibility(1)
         self.add_viscolor_toolbar(actor_name, parent_toolbar=self.toolbars[actor_name])
         self.toolbars[actor_name].setFixedWidth(self.QSliders_toolbar.width())
-        self.app_window.addToolBar(Qt.Qt.LeftToolBarArea, self.toolbars[actor_name])
-        self.isosurfaces[actor_name] = self.renderer.actors[actor_name]
+        self.app_window.addToolBar(
+            Qt.Qt.LeftToolBarArea,
+            self.toolbars[actor_name]
+        )
+        # self.isosurfaces[actor_name] = self.renderer.actors[actor_name]
 
 
 
