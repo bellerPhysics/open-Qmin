@@ -25,7 +25,6 @@ import pyvistaqt as pvqt
 import sys
 import glob
 
-
 pv.global_theme.silhouette.line_width = 0
 
 class ViewMinPlot(pvqt.BackgroundPlotter):
@@ -33,7 +32,6 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         super().__init__(multi_samples=8,line_smoothing=True, point_smoothing=True, polygon_smoothing=True,
         )
         self.theme.antialiasing = True
-        self.theme.silhouette.color = 'red'
         self.finished_setup = False
         self.make_empty_convenience_arrays()
         self.set_settings(user_settings)
@@ -812,7 +810,7 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
             actor_dict = self.get_actor_dict("slice_plane")
             default_mesh_kwargs = dict(
-                opacity=0.1,
+                opacity=0.9,
                 ambient=1, diffuse=0, specular=0, # glows, doesn't reflect
             )
             for key in default_mesh_kwargs:
@@ -877,8 +875,9 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         actor_dict = self.get_actor_dict(actor_name)
         if pyvista_filter is not None:
             actor_dict["filter"] = pyvista_filter
-        if filter_kwargs is not None:
-            actor_dict["filter_kwargs"] = filter_kwargs
+        if type(filter_kwargs) is dict:
+            for key in filter_kwargs.keys():
+                actor_dict["filter_kwargs"][key] = filter_kwargs[key]
         if dataset_name is not None:
             actor_dict["dataset_name"] = dataset_name
 
@@ -951,7 +950,8 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             self.actors_dict[actor_name] = dict(
                 mesh_kwargs = dict(
                     name=actor_name
-                )
+                ),
+                filter_kwargs = dict()
             )
         return self.actors_dict[actor_name]
 
@@ -1158,27 +1158,44 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             while widget_name in self.widgets.keys():
                 widget_name += "\'"
 
-        def refresh_callback():
-            scalars = self.fullmesh[scalars_name]
-            stdev = np.std(scalars)
-
-            self.slices[slice_name] = self.add_mesh_slice(
-                self.fullmesh,
-                scalars=scalars_name, name=slice_name,
-                ambient=1, specular=0, diffuse=0,
-                cmap='jet',
-                # clim=clim,
-                #(lambda arr:
-                #       [ np.average(arr) - ((-1)**i)*2*np.std(arr) for i in range(2) ]
-                # )(self.fullmesh[scalars_name]),
-                scalar_bar_args=self.settings["scalar_bar_args"]
+        def refresh_callback(normal=None, origin=None):
+            # scalars = self.fullmesh[scalars_name]
+            # stdev = np.std(scalars)
+            slice_kwargs = dict(origin=origin)
+            if normal is not None:
+                slice_kwargs["normal"]=normal
+            self.slices[slice_name] = self.fullmesh.slice(**slice_kwargs)
+            self.update_actor(
+                slice_name,
+                lambda : self.slices[slice_name],
+                # filter_kwargs=slice_kwargs,
+                **dict(
+                    color=scalars_name,
+                    ambient=1, specular=0, diffuse=0
+                )
             )
+
+
+            # self.slices[slice_name] = self.add_mesh_slice(
+            #     self.fullmesh,
+            #     scalars=scalars_name, name=slice_name,
+            #     ambient=1, specular=0, diffuse=0,
+            #     cmap='jet',
+            #     # clim=clim,
+            #     #(lambda arr:
+            #     #       [ np.average(arr) - ((-1)**i)*2*np.std(arr) for i in range(2) ]
+            #     # )(self.fullmesh[scalars_name]),
+            #     scalar_bar_args=self.settings["scalar_bar_args"]
+            # )
+        self.widgets[widget_name] = self.add_plane_widget(
+            refresh_callback,
+        )
         self.refresh_functions[slice_name] = refresh_callback
         self.refresh_functions[slice_name]()
         self.standardize_scalar_bar(self.scalar_bars[scalars_name])
         self.renderer.actors[slice_name].SetVisibility(True)
         self.add_to_toggle_menu(slice_name)
-        self.widgets[widget_name] = self.plane_widgets[-1]
+        # self.widgets[widget_name] = self.plane_widgets[-1]
         self.add_plane_widget_to_widget_menu(widget_name)
 
     def standardize_scalar_bar(self, scalar_bar):
