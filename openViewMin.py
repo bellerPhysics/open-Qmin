@@ -17,7 +17,7 @@
 # * scalar bar text looks gross... is its antialiasing disabled?
 
 import numpy as np
-from pandas import read_csv
+from pandas import read_csv, DataFrame
 from qtpy import QtWidgets as qw
 import qtpy.QtCore as Qt
 import pyvista as pv
@@ -572,7 +572,8 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 # font_family="arial",
                 height=50,
                 n_colors=1000,
-                theme=self.theme
+                # theme=self.theme,
+                fmt="%.3f"
             ),
             "visible_symbol":'👁',
             "invisible_symbol":'🙈',
@@ -890,8 +891,13 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         # else:
         #     actor_name = isosurface_dict["dataset_name"] + "_isosurface"
 
-        if "color" in contour_kwargs.keys():
+        if "color" in contour_kwargs.keys(): # for newly passed color setting
             color = contour_kwargs["color"]
+        elif "color" in isosurface_dict["contour_kwargs"].keys():
+            # for previously set color
+            color = isosurface_dict["contour_kwargs"]["color"]
+            if color is None and "scalars" in isosurface_dict["contour_kwargs"].keys():
+                color = isosurface_dict["contour_kwargs"]["scalars"]
         else:
             color = None
         if color is None:
@@ -903,8 +909,19 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
         if color in self.scalar_fields(): # "color" is really "scalars"
             contour_kwargs["scalars"] = color
+            # if not "show_scalar_bar" in contour_kwargs.keys():
             contour_kwargs["show_scalar_bar"] = True
-            contour_kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
+            if not "scalar_bar_args" in contour_kwargs.keys():
+                contour_kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
+
+            new_scalar_bar_title = actor_name + ": \n" + color
+            if "title" in contour_kwargs["scalar_bar_args"].keys():
+                # check for customized scalar bar title, keep unchanged if so
+                if (actor_name + ": \n") in contour_kwargs["scalar_bar_args"]["title"]:
+                    contour_kwargs["scalar_bar_args"]["title"] = new_scalar_bar_title
+            else:
+                # use standard scalar bar title if no title assigned yet
+                contour_kwargs["scalar_bar_args"]["title"] = new_scalar_bar_title
             contour_kwargs["color"] = None
         else: # "color" is actually a color
             contour_kwargs["color"] = color
@@ -933,9 +950,9 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         #     contour_kwargs["show_scalar_bar"] = False
 
         if "scalar_bar" in isosurface_dict.keys():
-            self.remove_scalar_bar(
-                isosurface_dict["scalar_bar"].GetTitle()
-            )
+            scalar_bar_title = isosurface_dict["scalar_bar"].GetTitle()
+            if scalar_bar_title in self.scalar_bars.keys():
+                self.remove_scalar_bar(scalar_bar_title)
         self.renderer.actors[actor_name] = self.add_mesh(
             self.fullmesh.contour(
                 isosurface_dict["contour_values"],
@@ -950,7 +967,7 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
         if isosurface_dict["contour_kwargs"]["show_scalar_bar"]:
             scalar_bar = self.scalar_bars[
-                isosurface_dict["contour_kwargs"]["scalars"]
+                isosurface_dict["contour_kwargs"]["scalar_bar_args"]["title"]
             ]
             self.standardize_scalar_bar(scalar_bar)
             isosurface_dict["scalar_bar"] = scalar_bar
@@ -1354,6 +1371,16 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         if len(filenames) > 0:
             self.load(filenames)
 
+    def show_params(self, the_dict, exclude_keys=["theme"]):
+        return DataFrame(
+            [
+                [key, str(value)]
+                for (key, value) in zip(the_dict.keys(), the_dict.values())
+                if not key in exclude_keys
+            ],
+            columns=('key', 'value')
+        )
+
 
 def sort_filenames_by_timestamp(filenames):
     timestamps = []
@@ -1381,6 +1408,8 @@ def sort_filenames_by_timestamp(filenames):
     for timestamp in sorted(timestamps):
         sorted_filenames.append(filenames[timestamps.index(timestamp)])
     return sorted_filenames
+
+
 
 
 if __name__ == '__main__':
