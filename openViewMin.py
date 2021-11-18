@@ -6,12 +6,12 @@
 # * add multiple director glyph slices
 # * add omega vector
 # * check animation for open-Qmin data
-# * add opacity controls
-# * add boundary solid color controls
-# * add clim, cmap controls
 # * add auto-stitching for open-Qmin mpi data
 # * add data stride handling (including scaling derivatives)
 # * add ellipses as optional replacement for cylinders
+# * add "remove actor" option?
+# * GUI option to add glyphs to a filter
+# * GUI option to add
 
 # Known issues:
 # * scalar bar text looks gross... is its antialiasing disabled?
@@ -21,13 +21,12 @@ from pandas import read_csv, DataFrame
 from qtpy import QtWidgets as qw
 import qtpy.QtCore as Qt
 import pyvista as pv
-import pyvistaqt as pvqt
+from pyvistaqt import BackgroundPlotter
 import sys
 import glob
+import matplotlib.pyplot as plt
 
-pv.global_theme.silhouette.line_width = 0
-
-class ViewMinPlot(pvqt.BackgroundPlotter):
+class ViewMinPlot(BackgroundPlotter):
     def __init__(self, filenames=[], user_settings={}):
         super().__init__(multi_samples=8,line_smoothing=True, point_smoothing=True, polygon_smoothing=True,
         )
@@ -79,6 +78,7 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         self.refresh_functions = {}
         self.colorbars = {}
         self.actors_dict = {}
+        self.viscolor_toolbars = {}
 
     def make_geometric_objects_dict(self):
         self.geometric_objects = dict(
@@ -150,43 +150,51 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         self.load_frame()
 
     def setup_animation_buttons(self):
-        btn_width=45
-        self.animation_buttons_toolbar = qw.QToolBar("Animation")
+        btn_width=35
+        self.animation_buttons_toolbar = qw.QToolBar(
+            "Animation",
+            orientation=Qt.Qt.Vertical
+        )
         tb = self.animation_buttons_toolbar
         tb.setStyleSheet("QToolBar{spacing:0px;}")
 
+        toolbar_row = qw.QToolBar(orientation=Qt.Qt.Horizontal)
+        toolbar_row.setStyleSheet("QToolBar{spacing:0px;}")
         sb = qw.QSpinBox(minimum=0, maximum=len(self.fullmeshes))
         sb.setValue(self.frame_num)
         sb.editingFinished.connect(lambda : self.load_frame(frame_num=sb.value()))
         self.frame_spinbox = sb
 
-        btn = qw.QPushButton('⏮')
+        btn = qw.QPushButton('|<')
         btn.setFixedWidth(btn_width)
         btn.released.connect(self.first_frame)
         btn.released.connect(lambda : sb.setValue(self.frame_num))
-        tb.addWidget(btn)
+        toolbar_row.addWidget(btn)
 
-        btn = qw.QPushButton('⬅️')
+        btn = qw.QPushButton('<')
         btn.setFixedWidth(btn_width)
         btn.released.connect(self.previous_frame)
         btn.released.connect(lambda : sb.setValue(self.frame_num))
-        tb.addWidget(btn)
+        toolbar_row.addWidget(btn)
 
-        tb.addWidget(sb)
+        # toolbar_row.addWidget(sb)
 
-        btn = qw.QPushButton('➡️')
+        btn = qw.QPushButton('>')
         btn.released.connect(self.next_frame)
         btn.released.connect(lambda : sb.setValue(self.frame_num))
         btn.setFixedWidth(btn_width)
-        tb.addWidget(btn)
+        toolbar_row.addWidget(btn)
 
-        btn = qw.QPushButton('⏭')
+        btn = qw.QPushButton('>|')
         btn.released.connect(self.last_frame)
         btn.released.connect(lambda : sb.setValue(self.frame_num))
         btn.setFixedWidth(btn_width)
-        tb.addWidget(btn)
+        toolbar_row.addWidget(btn)
 
-        self.app_window.addToolBar(tb)
+        tb.addWidget(toolbar_row)
+        tb.setFixedWidth(self.settings["QSliders_toolbar_width"])
+        self.app_window.addToolBar(Qt.Qt.LeftToolBarArea, tb)
+        # self.app_window.addToolBar(tb)
 
 
     def setup_import_menu(self):
@@ -197,8 +205,8 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         )
 
     def setup_menus(self):
-        self.toggle_menu = self.main_menu.addMenu('Toggle')
-        self.toggle_menu.aboutToShow.connect(self.update_toggle_menu)
+        # self.toggle_menu = self.main_menu.addMenu('Toggle')
+        # self.toggle_menu.aboutToShow.connect(self.update_toggle_menu)
         self.the_Add_menu = self.main_menu.addMenu("Add")
         self.widget_menu = self.main_menu.addMenu("Widgets")
         self.widget_menu.aboutToShow.connect(self.update_widget_menu)
@@ -230,22 +238,22 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 self.widgets["director_slice_widget"].GetEnabled()
             )
         )
-        self.the_color_by_menu = self.main_menu.addMenu("Color by")
-        self.the_color_by_menu.aboutToShow.connect(self.color_by_menu_update)
-        for scalar_bar_name in self.scalar_bars.keys():
-            self.add_scalar_bar_to_toggle_menu(scalar_bar_name)
+        # self.the_color_by_menu = self.main_menu.addMenu("Color by")
+        # self.the_color_by_menu.aboutToShow.connect(self.color_by_menu_update)
+        # for scalar_bar_name in self.scalar_bars.keys():
+        #     self.add_scalar_bar_to_toggle_menu(scalar_bar_name)
 
-    def color_by_menu_update(self):
-        menu = self.the_color_by_menu
-        menu.clear()
-        for actor_name in self.colors.keys():
-            # exclude color bars and widget outlines
-            if not "Addr=" in actor_name and not (
-                    len(actor_name.split('outline'))==2
-                    and len(actor_name.split('outline')[0])>0
-            ):
-                submenu = menu.addMenu(actor_name)
-                submenu.aboutToShow.connect(self.color_by_submenu_update(actor_name, submenu))
+    # def color_by_menu_update(self):
+    #     menu = self.the_color_by_menu
+    #     menu.clear()
+    #     for actor_name in self.colors.keys():
+    #         # exclude color bars and widget outlines
+    #         if not "Addr=" in actor_name and not (
+    #                 len(actor_name.split('outline'))==2
+    #                 and len(actor_name.split('outline')[0])>0
+    #         ):
+    #             submenu = menu.addMenu(actor_name)
+    #             submenu.aboutToShow.connect(self.color_by_submenu_update(actor_name, submenu))
 
 
     def make_color_by_submenu_callback(self, actor_name, scalar_field):
@@ -263,18 +271,18 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 )
         return return_function
 
-    def update_toggle_menu(self):
-        self.toggle_menu.clear()
-        for actor_name in self.renderer.actors.keys():
-            # exclude color bars and widget outlines
-            if (not "Addr=" in actor_name
-                and not (len(actor_name.split('outline'))==2
-                         and len(actor_name.split('outline')[0])>0
-                        )
-            ):
-                self.add_to_toggle_menu(actor_name)
-        for scalar_bar_name in self.scalar_bars.keys():
-            self.add_scalar_bar_to_toggle_menu(scalar_bar_name)
+    # def update_toggle_menu(self):
+    #     self.toggle_menu.clear()
+    #     for actor_name in self.renderer.actors.keys():
+    #         # exclude color bars and widget outlines
+    #         if (not "Addr=" in actor_name
+    #             and not (len(actor_name.split('outline'))==2
+    #                      and len(actor_name.split('outline')[0])>0
+    #                     )
+    #         ):
+    #             self.add_to_toggle_menu(actor_name)
+    #     for scalar_bar_name in self.scalar_bars.keys():
+    #         self.add_scalar_bar_to_toggle_menu(scalar_bar_name)
 
 
     def update_widget_menu(self):
@@ -282,30 +290,37 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         for widget_name in self.widgets.keys():
             self.add_plane_widget_to_widget_menu(widget_name)
 
-    def add_to_toggle_menu(self, actor_name):
-        menu_action = self.toggle_menu.addAction(actor_name,
-                              self.generic_menu_toggle(actor_name))
-        menu_action.setCheckable(True)
-        is_visible = self.renderer.actors[actor_name].GetVisibility()
-        menu_action.setChecked(is_visible)
+    # def add_to_toggle_menu(self, actor_name):
+    #     menu_action = self.toggle_menu.addAction(actor_name,
+    #                           self.generic_menu_toggle(actor_name))
+    #     menu_action.setCheckable(True)
+    #     is_visible = self.renderer.actors[actor_name].GetVisibility()
+    #     menu_action.setChecked(is_visible)
 
-    def add_scalar_bar_to_toggle_menu(self, scalar_bar_name):
-        scalar_bar = self.scalar_bars[scalar_bar_name]
-        menu_action = self.toggle_menu.addAction("└─ " + scalar_bar_name + " colorbar",
-            lambda : self.toggle_visibility(scalar_bar)
-        )
-        menu_action.setCheckable(True)
-        is_visible = self.scalar_bars[scalar_bar_name].GetVisibility()
-        menu_action.setChecked(is_visible)
+    # def add_scalar_bar_to_toggle_menu(self, scalar_bar_name):
+    #     # scalar_bar = self.scalar_bars[scalar_bar_name]
+    #     menu_action = self.toggle_menu.addAction("└─ " + scalar_bar_name + " colorbar",
+    #         lambda : self.toggle_visibility(scalar_bar_name, is_scalar_bar=True)
+    #     )
+    #     menu_action.setCheckable(True)
+    #     is_visible = self.scalar_bars[scalar_bar_name].GetVisibility()
+    #     menu_action.setChecked(is_visible)
 
 
-    def toggle_visibility(self, actor):
-        if type(actor) is str:
-            actor_name = actor
+    def toggle_visibility(self, actor_name, is_scalar_bar=False):
+        # if type(actor) is str:
+        #     actor_name = actor
+        if is_scalar_bar:
+            actor = self.scalar_bars[actor_name]
+        else:
             actor = self.renderer.actors[actor_name]
-            if actor_name in self.visibility_checkboxes.keys():
-                self.visibility_checkboxes[actor_name].setChecked(1-actor.GetVisibility())
+        if actor_name in self.visibility_checkboxes.keys():
+            self.visibility_checkboxes[actor_name].setChecked(1-actor.GetVisibility())
         actor.SetVisibility(1-actor.GetVisibility())
+        if actor_name in self.colorbars:
+            scalar_bar = self.scalar_bars[self.colorbars[actor_name]]
+            if scalar_bar.GetVisibility() and not actor.GetVisibility():
+                scalar_bar.SetVisibility(0)
 
     def add_plane_widget_to_widget_menu(self, widget_name):
         menu_action = self.widget_menu.addAction(
@@ -323,7 +338,7 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             "order",
             actor_name="defects",
             mesh=None,
-            label_txt="defects S",
+            label_txt="Defects: S=",
             min_val=0,
             max_val=1,
             init_slider_int=30
@@ -377,16 +392,22 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         )
         toolbar = self.toolbars["lighting"]
         toolbar.setFixedWidth(self.settings["QSliders_toolbar_width"])
-        self.QSliders["lighting"] = qw.QSlider(minimum=0, maximum=25,
+        toolbar_row = qw.QToolBar(orientation=Qt.Qt.Horizontal)
+        self.QSliders["lighting"] = qw.QSlider(minimum=0, maximum=20,
                                           orientation=Qt.Qt.Horizontal)
         self.QSliders_labels["lighting"] = qw.QLabel()
 
-        toolbar.addWidget(self.QSliders_labels["lighting"])
+        # toolbar.addWidget(self.QSliders_labels["lighting"])
         slider = self.QSliders["lighting"]
         slider.valueChanged.connect(self.set_lights_intensity)
         slider.valueChanged.connect(
-            lambda value: self.QSliders_labels["lighting"].setText(f'Lighting: {value}'))
-        toolbar.addWidget(slider)
+            lambda value: self.QSliders_labels["lighting"].setText(f'💡: {value}'))
+        slider.setFixedWidth(80)
+        toolbar_row.addWidget(self.QSliders_labels["lighting"])
+        toolbar_row.addWidget(slider)
+        toolbar.addWidget(toolbar_row)
+
+        # toolbar.addWidget(slider)
         slider.setValue(9)
         slider.setValue(8)
         self.app_window.addToolBar(Qt.Qt.LeftToolBarArea, toolbar)
@@ -539,7 +560,34 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
 
     def setup_director_slice_widget(self):
-        widget_name="director_slice_widget"
+        self.setup_slice_widget(
+            "director_slice_widget",
+            self.director_slice_func
+        )
+        # widget_name="director_slice_widget"
+        # if widget_name in self.widgets.keys():
+        #     widget = self.widgets[widget_name]
+        #     normal=widget.GetNormal()
+        #     origin=widget.GetOrigin()
+        #     enabled=widget.GetEnabled()
+        #     widget.SetEnabled(0)
+        # else:
+        #     normal=(1.0, 0.0, 0.0)
+        #     origin=(self.Lx/2, self.Ly/2, self.Lz/2)
+        #     enabled=True
+        #
+        # self.widgets[widget_name] = self.add_plane_widget(
+        #     self.director_slice_func,
+        #     factor=1.1,
+        #     color=self.settings["plane_widget_color"],
+        #     tubing=True,
+        #     normal=normal,
+        #     origin=origin
+        # )
+        # self.widgets[widget_name].SetEnabled(enabled)
+
+
+    def setup_slice_widget(self, widget_name, callback):
         if widget_name in self.widgets.keys():
             widget = self.widgets[widget_name]
             normal=widget.GetNormal()
@@ -552,7 +600,7 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             enabled=True
 
         self.widgets[widget_name] = self.add_plane_widget(
-            self.director_slice_func,
+            callback,
             factor=1.1,
             color=self.settings["plane_widget_color"],
             tubing=True,
@@ -560,7 +608,6 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             origin=origin
         )
         self.widgets[widget_name].SetEnabled(enabled)
-
 
     def Q33_from_Q5(self, Q5):
         (Qxx, Qxy, Qxz, Qyy, Qyz) = Q5.T
@@ -614,7 +661,12 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 roughness=0.25,
                 diffuse=1
             ),
-            "QSliders_toolbar_width":150
+            "default_slice_kwargs":dict(
+                opacity=0.9,
+                ambient=1, diffuse=0, specular=0, # glows, doesn't reflect
+            ),
+            "QSliders_toolbar_width":150,
+            "rod_aspect_ratio":5
         }
         self.colors["director"] = self.settings["director_color"]
         self.colors["slice_plane"] = self.settings["slice_plane_color"]
@@ -740,10 +792,10 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                            (nres,)*3
                           )
         )
-        try:
-            self.QSliders_labels["director glyphs stride"].setText(f"director stride: {nres}")
-        except KeyError:
-            pass
+        # try:
+        #     self.QSliders_labels["director glyphs stride"].setText(f"director stride: {nres}")
+        # except KeyError:
+        #     pass
 
         self.director_slice_func = self.make_director_slice_func()
 
@@ -775,7 +827,10 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         if mesh is None:
             mesh = self.fullmesh
         if glyph_shape is None:
-            glyph_shape = self.cylinder
+            glyph_shape = self.geometric_objects["cylinder"](
+                radius=0.5/self.settings["rod_aspect_ratio"],
+                height=1
+            )
         if orient is not None:
             glyph_kwargs["orient"] = orient
         if scale is not None:
@@ -800,22 +855,71 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             )
             checkbox.toggled.connect(self.set_checkbox_symbol(checkbox))
 
-    def make_director_slice_func(self):
-        def director_slice_func(normal, origin):
+    def add_if_dict_lacks(self, to_dict, from_dict):
+        for key in from_dict.keys():
+            if not key in to_dict.keys():
+                to_dict[key] = from_dict[key]
+
+    def make_slice_widget_callback(self, actor_name=None, what_to_put_func=None, slice_name=None, mesh_to_slice=None):
+        if mesh_to_slice is None:
+            mesh_to_slice = self.coarsemesh
+        if slice_name is None and actor_name is not None:
+            slice_name = actor_name + "_plane"
+        def slice_widget_callback(normal, origin):
             """make glyph plot and transparent plane for director field slice"""
             origin = tuple(
                 self.director_resolution * np.asarray(
                     np.array(origin)/self.director_resolution, dtype=int
                 )
             )
-            slc = self.coarsemesh.slice(normal=normal, origin=origin)
-            actor_dict = self.get_actor_dict("director")
+            slc = mesh_to_slice.slice(normal=normal, origin=origin)
+            if actor_name is not None and what_to_put_func is not None:
+                actor_dict = self.get_actor_dict(actor_name)
+                self.add_if_dict_lacks(
+                    actor_dict["mesh_kwargs"],
+                    self.settings["default_mesh_kwargs"]
+                )
+                # for key in self.settings["default_mesh_kwargs"].keys():
+                #     if not key in actor_dict["mesh_kwargs"].keys():
+                #         actor_dict["mesh_kwargs"][key] = self.settings["default_mesh_kwargs"][key]
+                try:
+                    what_to_put_func(slc)
+                except ValueError:
+                    pass
+            # self.add_glyphs_to_mesh(
+            #     actor_name=actor_name,
+            #     mesh=slc,
+            #     glyph_shape=self.geometric_objects["cylinder"](
+            #         radius=0.2, height=1,
+            #         resolution=self.settings["cylinder_resolution"]
+            #     ),
+            #     orient="director", scale="nematic_sites",
+            #     factor=self.director_resolution,
+            #     **actor_dict["mesh_kwargs"]
+            # )
+            actor_dict = self.get_actor_dict(slice_name)
+            self.add_if_dict_lacks(
+                actor_dict["mesh_kwargs"],
+                self.settings["default_slice_kwargs"]
+            )
+            # default_slice_kwargs = self.settings["default_slice_kwargs"]
+            # for key in default_slice_kwargs:
+            #     if not key in actor_dict["mesh_kwargs"].keys():
+            #         actor_dict["mesh_kwargs"][key] = default_slice_kwargs[key]
+            try:
+                self.update_actor(
+                    slice_name,
+                    filter = lambda : slc,
+                    **actor_dict["mesh_kwargs"]
+                )
+            except ValueError:
+                pass
+        return slice_widget_callback
 
-            for key in self.settings["default_mesh_kwargs"]:
-                if not key in actor_dict["mesh_kwargs"].keys():
-                    actor_dict["mesh_kwargs"][key] = self.settings["default_mesh_kwargs"][key]
-
-            self.add_glyphs_to_mesh(
+    def make_director_slice_func(self):
+        return self.make_slice_widget_callback(
+            "director",
+            lambda slc: self.add_glyphs_to_mesh(
                 actor_name="director",
                 mesh=slc,
                 glyph_shape=self.geometric_objects["cylinder"](
@@ -824,25 +928,44 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 ),
                 orient="director", scale="nematic_sites",
                 factor=self.director_resolution,
-                **actor_dict["mesh_kwargs"]
-            )
-
-            actor_dict = self.get_actor_dict("slice_plane")
-            default_mesh_kwargs = dict(
-                opacity=0.9,
-                ambient=1, diffuse=0, specular=0, # glows, doesn't reflect
-            )
-            for key in default_mesh_kwargs:
-                if not key in actor_dict["mesh_kwargs"].keys():
-                    actor_dict["mesh_kwargs"][key] = default_mesh_kwargs[key]
-
-            self.update_actor(
-                "slice_plane",
-                filter = lambda : slc,
-                **actor_dict["mesh_kwargs"]
-            )
-
-        return director_slice_func
+                **self.actors_dict["director"]["mesh_kwargs"]
+            ),
+            slice_name="slice_plane"
+        )
+        # def director_slice_func(normal, origin):
+        #     """make glyph plot and transparent plane for director field slice"""
+        #     origin = tuple(
+        #         self.director_resolution * np.asarray(
+        #             np.array(origin)/self.director_resolution, dtype=int
+        #         )
+        #     )
+        #     slc = self.coarsemesh.slice(normal=normal, origin=origin)
+        #     actor_dict = self.get_actor_dict("director")
+        #     for key in self.settings["default_mesh_kwargs"]:
+        #         if not key in actor_dict["mesh_kwargs"].keys():
+        #             actor_dict["mesh_kwargs"][key] = self.settings["default_mesh_kwargs"][key]
+        #     self.add_glyphs_to_mesh(
+        #         actor_name="director",
+        #         mesh=slc,
+        #         glyph_shape=self.geometric_objects["cylinder"](
+        #             radius=0.2, height=1,
+        #             resolution=self.settings["cylinder_resolution"]
+        #         ),
+        #         orient="director", scale="nematic_sites",
+        #         factor=self.director_resolution,
+        #         **actor_dict["mesh_kwargs"]
+        #     )
+        #     actor_dict = self.get_actor_dict("slice_plane")
+        #     default_slice_kwargs = self.settings["default_slice_kwargs"]
+        #     for key in default_slice_kwargs:
+        #         if not key in actor_dict["mesh_kwargs"].keys():
+        #             actor_dict["mesh_kwargs"][key] = default_slice_kwargs[key]
+        #     self.update_actor(
+        #         "slice_plane",
+        #         filter = lambda : slc,
+        #         **actor_dict["mesh_kwargs"]
+        #     )
+        # return director_slice_func
 
     def set_color(self, actor_name, color):
         if not actor_name in self.renderer.actors:
@@ -913,6 +1036,8 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 color = self.settings["default_isosurface_color"]
         self.colors[actor_name] = color
 
+        # sb_lut = sb_pos = sb_vis = sb_ht = sb_wt = None
+        sb_vis = None
         if color in self.scalar_fields(): # "color" is really "scalars"
             kwargs["scalars"] = color
             # if not "show_scalar_bar" in contour_kwargs.keys():
@@ -921,17 +1046,39 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
                 kwargs["scalar_bar_args"] = self.settings["scalar_bar_args"]
 
             new_scalar_bar_title = color
-            # check that we're not taking the name of another actor's scalar bar
+            # make sure we're not taking the name of another actor's scalar bar
             if "scalar_bar" in actor_dict.keys():
+                old_scalar_bar_name = actor_dict["scalar_bar"].GetTitle()
                 do_title_check = (
-                    new_scalar_bar_title != actor_dict["scalar_bar"].GetTitle()
+                    new_scalar_bar_title != old_scalar_bar_name
                 )
+                old_scalar_bar = self.scalar_bars[old_scalar_bar_name]
+                # sb_lut = old_scalar_bar.GetLookupTable()
+                # sb_pos = old_scalar_bar.GetPosition()
+                sb_vis = old_scalar_bar.GetVisibility()
+                # sb_ht = old_scalar_bar.GetHeight()
+                # sb_wt = old_scalar_bar.GetWidth()
+                scalar_bar_actor_name = self.get_scalar_bar_actor(
+                    scalar_bar_name=old_scalar_bar_name
+                )
+                # if scalar_bar_actor_name in self.viscolor_toolbars.keys():
+                #     self.viscolor_toolbars[scalar_bar_actor_name].destroy()
+                self.remove_scalar_bar(old_scalar_bar_name)
+
             else:
                 do_title_check = True
             if do_title_check:
-                i=0
-                while new_scalar_bar_title in self.scalar_bars.keys():
-                    i += 1
+                new_scalar_bar_title = self.name_without_overwriting(
+                    new_scalar_bar_title,
+                    self.scalar_bars
+                )
+                # i=0
+                # while new_scalar_bar_title in self.scalar_bars.keys():
+                #     i += 1
+                #     new_scalar_bar_title = (
+                #         try_new_scalar_bar_title + "_" + str(i)
+                #     )
+
 
             kwargs["scalar_bar_args"]["title"] = new_scalar_bar_title
             kwargs["scalar_bar_args"]["title_font_size"] = self.settings["scalar_bar_args"]["title_font_size"]
@@ -940,6 +1087,18 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             kwargs["color"] = color
             kwargs["scalars"] = None
             kwargs["show_scalar_bar"] = False
+
+            if "scalar_bar" in actor_dict.keys():
+                old_scalar_bar_name = actor_dict["scalar_bar"].GetTitle()
+                self.remove_scalar_bar(old_scalar_bar_name)
+                scalar_bar_actor_name = self.get_scalar_bar_actor(
+                    scalar_bar_name=old_scalar_bar_name
+                )
+                # if scalar_bar_actor_name in self.viscolor_toolbars.keys():
+                #     self.viscolor_toolbars[scalar_bar_actor_name].destroy()
+                if actor_name in self.colorbars.keys():
+                    del self.colorbars[actor_name]
+                del actor_dict["scalar_bar"]
 
         kwargs["name"] = actor_name
         for key in kwargs.keys():
@@ -955,8 +1114,14 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
             scalar_bar = self.scalar_bars[
                 actor_dict["mesh_kwargs"]["scalar_bar_args"]["title"]
             ]
-            self.standardize_scalar_bar(scalar_bar)
+            self.colorbars[actor_name] = scalar_bar.GetTitle()
             actor_dict["scalar_bar"] = scalar_bar
+            # self.add_viscolor_toolbar_for_colorbar(actor_name)
+            self.standardize_scalar_bar(scalar_bar)
+            if sb_vis is not None:
+                scalar_bar.SetVisibility(sb_vis)
+
+
 
         self.renderer.actors[actor_name].SetVisibility(visibility)
         self.relink_visibility_checkbox(actor_name)
@@ -1149,6 +1314,16 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         return return_function
 
 
+
+
+    def name_without_overwriting(self, try_new_name, dict_of_old_names):
+        new_name = try_new_name
+        i=1
+        while new_name in dict_of_old_names.keys():
+            i += 1
+            new_name = try_new_name + "_" + str(i)
+        return new_name
+
     def add_slice_aux(self, scalars_name):
         def return_function():
             self.add_slice(scalars_name)
@@ -1156,43 +1331,75 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
     def add_slice(self, scalars_name, slice_name=None, widget_name=None):
         if slice_name is None:
-            try_slice_name = scalars_name+"_slice"
-            slice_name = try_slice_name
-            i=1
-            while slice_name in self.actors_dict.keys():
-                i += 1
-                slice_name = try_slice_name + "_" + str(i)
-        if widget_name is None:
-            try_widget_name = slice_name + "_widget"
-            widget_name = try_widget_name
-            i=1
-            while widget_name in self.widgets.keys():
-                i += 1
-                widget_name = try_widget_name + "_" + str(i)
-
-        def refresh_callback(normal=None, origin=None):
-            slice_kwargs = dict(origin=origin)
-            if normal is not None:
-                slice_kwargs["normal"]=normal
-            self.slices[slice_name] = self.fullmesh.slice(**slice_kwargs)
-            self.update_actor(
-                slice_name,
-                lambda : self.slices[slice_name],
-                **dict(
-                    color=scalars_name,
-                    ambient=1, specular=0, diffuse=0
-                )
+            slice_name = self.name_without_overwriting(
+                scalars_name + "_slice",
+                self.actors_dict
             )
+            # try_slice_name = scalars_name+"_slice"
+            # slice_name = try_slice_name
+            # i=1
+            # while slice_name in self.actors_dict.keys():
+            #     i += 1
+            #     slice_name = try_slice_name + "_" + str(i)
+        if widget_name is None:
+            widget_name = self.name_without_overwriting(
+                slice_name + "_widget",
+                self.widgets
+            )
+            # try_widget_name = slice_name + "_widget"
+            # widget_name = try_widget_name
+            # i=1
+            # while widget_name in self.widgets.keys():
+            #     i += 1
+            #     widget_name = try_widget_name + "_" + str(i)
 
-        self.widgets[widget_name] = self.add_plane_widget(
-            refresh_callback,
+        self.setup_slice_widget(
+            widget_name,
+            self.make_slice_widget_callback(
+                slice_name = slice_name,
+                mesh_to_slice = self.fullmesh
+            )
         )
-        self.refresh_functions[slice_name] = refresh_callback
-        self.refresh_functions[slice_name]()
-        self.standardize_scalar_bar(self.scalar_bars[scalars_name])
+        self.update_actor(
+            slice_name,
+            color = scalars_name,
+            **self.settings["default_slice_kwargs"]
+        )
         self.renderer.actors[slice_name].SetVisibility(True)
-        self.add_to_toggle_menu(slice_name)
-        self.add_plane_widget_to_widget_menu(widget_name)
+
+        if slice_name in self.colorbars.keys():
+            scalar_bar = self.scalar_bars[self.colorbars[slice_name]]
+            self.standardize_scalar_bar(scalar_bar)
+
+        if not slice_name in self.toolbars.keys():
+            self.add_viscolor_toolbar(
+                slice_name,
+                label=slice_name
+            )
+        #
+        # def refresh_callback(normal=None, origin=None):
+        #     slice_kwargs = dict(origin=origin)
+        #     if normal is not None:
+        #         slice_kwargs["normal"]=normal
+        #     self.slices[slice_name] = self.fullmesh.slice(**slice_kwargs)
+        #     self.update_actor(
+        #         slice_name,
+        #         lambda : self.slices[slice_name],
+        #         **dict(
+        #             color=scalars_name,
+        #             ambient=1, specular=0, diffuse=0
+        #         )
+        #     )
+
+        # self.widgets[widget_name] = self.add_plane_widget(
+        #     refresh_callback,
+        # )
+        # self.refresh_functions[slice_name] = refresh_callback
+        # self.refresh_functions[slice_name]()
+        # self.standardize_scalar_bar(self.scalar_bars[scalars_name])
+        # self.renderer.actors[slice_name].SetVisibility(True)
+        # self.add_to_toggle_menu(slice_name)
+        # self.add_plane_widget_to_widget_menu(widget_name)
 
     def standardize_scalar_bar(self, scalar_bar):
         scalar_bar.SetMaximumHeightInPixels(
@@ -1204,15 +1411,42 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         scalar_bar.SetTextPad(self.settings["scalar_bar_text_pad"])
         scalar_bar.UnconstrainedFontSizeOff()
 
-    def add_viscolor_toolbar(self, actor_name, label=None, parent_toolbar=None):
+
+    def get_scalar_bar_actor(self, scalar_bar_name=None, actor_name=None):
+        if scalar_bar_name is None and actor_name is not None:
+            scalar_bar_name = self.colorbars[actor_name]
+        scalar_bar = self.scalar_bars[scalar_bar_name]
+        for actor_name in self.renderer.actors.keys():
+            if self.renderer.actors[actor_name] is scalar_bar:
+                return actor_name
+
+    def add_viscolor_toolbar_for_colorbar(self, actor_name):
+        if actor_name in self.toolbars.keys() and actor_name in self.colorbars.keys():
+            self.add_viscolor_toolbar(
+                self.get_scalar_bar_actor(actor_name=actor_name),
+                parent_toolbar = self.toolbars[actor_name],
+                label='  colorbar',
+                is_colorbar=True
+            )
+
+    def add_viscolor_toolbar(self, actor_name, label=None, parent_toolbar=None,
+    is_colorbar=False):
         toolbar_row = qw.QToolBar()
+        self.add_visibility_checkbox(actor_name, toolbar_row)
+        # self.add_color_picker_button(actor_name, toolbar_row)
         if parent_toolbar is None:
-            parent_toolbar = self.app_window
+            self.toolbars[actor_name] = qw.QToolBar(actor_name)
+            parent_toolbar = self.toolbars[actor_name]
+            self.app_window.addToolBar(
+                Qt.Qt.LeftToolBarArea,
+                parent_toolbar
+            )
         if label is not None:
             parent_toolbar.addWidget(qw.QLabel(label))
-        self.add_color_picker_button(actor_name, toolbar_row)
-        self.add_visibility_checkbox(actor_name, toolbar_row)
         parent_toolbar.addWidget(toolbar_row)
+        self.viscolor_toolbars[actor_name] = toolbar_row
+        self.add_color_options_menu(actor_name)
+
 
     def color_picker(self, actor_name):
         self.set_color(actor_name, qw.QColorDialog.getColor().name())
@@ -1220,7 +1454,8 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
 
     def add_color_picker_button(self, actor_name, toolbar):
         color_button = qw.QPushButton('🎨')
-        color_button.setToolTip('choose color for '+actor_name)
+        color_button.setToolTip('choose solid color for '+actor_name)
+        color_button.setMaximumWidth(45)
         color_button.clicked.connect(lambda: self.color_picker(actor_name))
         toolbar.addWidget(color_button)
 
@@ -1229,9 +1464,150 @@ class ViewMinPlot(pvqt.BackgroundPlotter):
         checkbox.setChecked(self.renderer.actors[actor_name].GetVisibility())
         checkbox.toggled.connect(self.set_checkbox_symbol(checkbox))
         checkbox.toggled.connect(lambda : self.toggle_visibility(actor_name))
-        checkbox.setToolTip('toggle visibility of '+actor_name)
+        checkbox.setToolTip('toggle visibility of \"'+actor_name + '\"')
         toolbar.addWidget(checkbox)
         self.visibility_checkboxes[actor_name] = checkbox
+
+    def add_color_options_menu(self, actor_name):
+        minwidth=300
+        actor_dict = self.actors_dict[actor_name]
+        if "scalars" in actor_dict["mesh_kwargs"].keys():
+            current_color_array_name = actor_dict["mesh_kwargs"]["scalars"]
+        else:
+            current_color_array_name = None
+        if "cmap" in actor_dict["mesh_kwargs"].keys():
+            current_cmap = actor_dict["mesh_kwargs"]["cmap"]
+        else:
+            current_cmap = None
+        color_picker_choice = lambda: self.color_picker(actor_name)
+
+        cb_colorby = qw.QComboBox()
+        cb_colorby.addItems(self.scalar_fields())
+        if current_color_array_name in self.scalar_fields():
+            cb_colorby.setCurrentIndex(self.scalar_fields().index(current_color_array_name))
+        else:
+            cb_colorby.setCurrentIndex(-1)
+
+        def update_clim_maxmin_display():
+            if self.colors[actor_name] in self.scalar_fields():
+                if "clim" in self.actors_dict[actor_name]["mesh_kwargs"]:
+                    vmin, vmax = self.actors_dict[actor_name]["mesh_kwargs"]["clim"]
+                else:
+                    scalar_field = self.colors[actor_name]
+                    vmin = np.min(self.fullmesh[scalar_field])
+                    vmax = np.max(self.fullmesh[scalar_field])
+                    self.update_actor(actor_name, clim=[vmin,vmax])
+
+                sb_clim_min.setValue(vmin)
+                sb_clim_max.setValue(vmax)
+
+        def colorby_callback(choice_num):
+            color_array_name = self.scalar_fields()[choice_num]
+            vmin = np.min(self.fullmesh[color_array_name])
+            vmax = np.max(self.fullmesh[color_array_name])
+            self.update_actor(
+                actor_name,
+                color=color_array_name,
+                clim=[vmin,vmax]
+            )
+            update_clim_maxmin_display()
+
+        cb_colorby.currentIndexChanged.connect(colorby_callback)
+        cb_cmap = qw.QComboBox()
+        colormaps = plt.colormaps()
+        cb_cmap.addItems(colormaps)
+        if current_cmap in colormaps:
+            cb_cmap.setCurrentIndex(colormaps.index(current_cmap))
+        else:
+            cb_cmap.setCurrentIndex(-1)
+        cb_cmap.currentIndexChanged.connect(
+            lambda choice_num: self.update_actor(
+                actor_name,
+                cmap=colormaps[choice_num]
+            )
+        )
+        sb_clim_min = qw.QDoubleSpinBox()
+        sb_clim_min.valueChanged.connect(
+            lambda value: self.update_actor(
+                actor_name,
+                clim=[
+                    min(value, sb_clim_max.value()),
+                    sb_clim_max.value()
+                ]
+            )
+        )
+        sb_clim_min.setSingleStep(0.1)
+        sb_clim_max = qw.QDoubleSpinBox()
+        sb_clim_max.valueChanged.connect(
+            lambda value: self.update_actor(
+                actor_name,
+                clim=[
+                    sb_clim_min.value(),
+                    max(sb_clim_min.value(), value)
+                ]
+            )
+        )
+        sb_clim_max.setSingleStep(0.1)
+
+        color_array_widget = qw.QWidget()
+        color_array_widget.setWindowTitle(f'Color for \"{actor_name}\"')
+        layout = qw.QVBoxLayout(color_array_widget)
+        formlayout = qw.QFormLayout()
+        formlayout.addRow(qw.QLabel('color array'), cb_colorby)
+        formlayout.addRow(qw.QLabel('colormap'), cb_cmap)
+        formlayout.addRow(qw.QLabel('min value'), sb_clim_min)
+        formlayout.addRow(qw.QLabel('max value'), sb_clim_max)
+        layout.addLayout(formlayout)
+
+        def color_array_choice():
+            update_clim_maxmin_display()
+            color_array_widget.show()
+
+        set_opacity_widget = qw.QWidget()
+        set_opacity_widget.setWindowTitle(f'Set opacity for \"{actor_name}\"')
+        sb_set_opacity = qw.QDoubleSpinBox(minimum=0, maximum=1)
+        sb_set_opacity.setSingleStep(0.1)
+        sb_set_opacity.valueChanged.connect(
+            lambda value: self.update_actor(actor_name, opacity=value)
+        )
+        opacity_widget_layout = qw.QVBoxLayout(set_opacity_widget)
+        opacity_form_layout = qw.QFormLayout()
+        opacity_form_layout.addRow(qw.QLabel('opacity: '), sb_set_opacity)
+        opacity_widget_layout.addLayout(opacity_form_layout)
+        set_opacity_widget.setMinimumWidth(minwidth)
+
+        def set_opacity_choice():
+            if "opacity" in self.actors_dict[actor_name]['mesh_kwargs'].keys():
+                opacity = self.actors_dict[actor_name]['mesh_kwargs']['opacity']
+            else:
+                opacity = 1
+            sb_set_opacity.setValue(opacity)
+            set_opacity_widget.show()
+
+
+        def toggle_colorbar_choice():
+            if actor_name in self.colorbars.keys():
+                colorbar = self.scalar_bars[self.colorbars[actor_name]]
+                colorbar.SetVisibility(1-colorbar.GetVisibility())
+
+        cb_children = [
+            lambda: None, color_picker_choice, color_array_choice, toggle_colorbar_choice, set_opacity_choice
+        ]
+        cb_parent = qw.QComboBox()
+        cb_parent.setMaximumWidth(60)
+        cb_parent.addItems(["🎨", "solid color", "color array", "show/hide colorbar", "set opacity"])
+        cb_parent.setCurrentIndex(0)
+        cb_parent.setToolTip('Color options for \"' + actor_name + "\"")
+        def index_change_callback(choice_num):
+            cb_children[choice_num]()
+            cb_parent.setCurrentIndex(0)
+
+        cb_parent.currentIndexChanged.connect(index_change_callback)
+
+        self.viscolor_toolbars[actor_name].addWidget(cb_parent)
+
+
+
 
 
     def alter_plane_widget(self, widget, actor_update_func, theta=None, phi=None, origin=None, dtheta=0, dphi=0, dOrigin=(0,0,0)):
