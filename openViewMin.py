@@ -9,7 +9,6 @@
 # * add auto-stitching for open-Qmin mpi data
 # * add data stride handling (including scaling derivatives)
 # * add ellipses as optional replacement for cylinders
-# * add "remove actor" option?
 # * GUI option to add glyphs to a filter
 # * GUI option to add
 
@@ -360,11 +359,11 @@ class ViewMinPlot(BackgroundPlotter):
         )
         self.refresh_functions[actor_name]()
 
-        self.toolbars["boundaries"] = qw.QToolBar("Boundaries",
+        self.toolbars[actor_name] = qw.QToolBar("Boundaries",
             orientation=Qt.Qt.Vertical,
             movable=True, floatable=True
         )
-        toolbar = self.toolbars["boundaries"]
+        toolbar = self.toolbars[actor_name]
         toolbar.setFixedWidth(self.settings["QSliders_toolbar_width"])
         toolbar.addWidget(qw.QLabel("Boundaries (all)"))
         self.add_viscolor_toolbar(
@@ -412,10 +411,10 @@ class ViewMinPlot(BackgroundPlotter):
         slider.setValue(8)
         self.app_window.addToolBar(Qt.Qt.LeftToolBarArea, toolbar)
 
-        self.toolbars["boundaries"] = qw.QToolBar(
-            "Boundaries", orientation=Qt.Qt.Vertical,
-            movable=True, floatable=True
-        )
+        # self.toolbars["boundaries"] = qw.QToolBar(
+        #     "Boundaries", orientation=Qt.Qt.Vertical,
+        #     movable=True, floatable=True
+        # )
 
         self.toolbars["director"] = qw.QToolBar(
             "Director", orientation=Qt.Qt.Vertical,
@@ -448,7 +447,7 @@ class ViewMinPlot(BackgroundPlotter):
 
         toolbar.addWidget(qw.QLabel('  plane'))
         self.add_viscolor_toolbar(
-            'slice_plane',
+            'director_slice_plane',
             parent_toolbar=toolbar
         )
 
@@ -634,7 +633,7 @@ class ViewMinPlot(BackgroundPlotter):
             "checkbox_spacing":10, # spacing between toggle boxes in pixels
             "window_size":(1200,800), # window size in pixels
             "cylinder_resolution":8, # angular resolution for each cylindrical rod; larger values look nicer but take longer to compute
-            "slice_plane_color":"lightyellow", # set to None to use slice_color_function instead
+            "director_slice_plane_color":"magenta", # set to None to use slice_color_function instead
             "slice_cmap":"cividis", # color map for use with slice_color_function
             "slice_color_function":(lambda slc: np.abs(slc["director"][:,0])), # optionally color slice plane by some function of director or order
             "plane_widget_color":"orange",
@@ -662,14 +661,14 @@ class ViewMinPlot(BackgroundPlotter):
                 diffuse=1
             ),
             "default_slice_kwargs":dict(
-                opacity=0.9,
-                ambient=1, diffuse=0, specular=0, # glows, doesn't reflect
+                opacity=0.1,
+                # ambient=1, diffuse=0, specular=0, # glows, doesn't reflect
             ),
             "QSliders_toolbar_width":150,
             "rod_aspect_ratio":5
         }
         self.colors["director"] = self.settings["director_color"]
-        self.colors["slice_plane"] = self.settings["slice_plane_color"]
+        self.colors["director_slice_plane"] = self.settings["director_slice_plane_color"]
         for key, value in zip(user_settings.keys(), user_settings.values()):
             self.settings[key] = value
         self.director_resolution = self.settings["director_resolution"]
@@ -807,7 +806,7 @@ class ViewMinPlot(BackgroundPlotter):
             widget.GetNormal(),
             widget.GetOrigin()
         )
-        self.refresh_functions['slice_plane'] = self.refresh_functions['director']
+        self.refresh_functions['director_slice_plane'] = self.refresh_functions['director']
         self.refresh_functions['director']()
 
     def plane_widget_toggle(self, widget_name):
@@ -930,7 +929,7 @@ class ViewMinPlot(BackgroundPlotter):
                 factor=self.director_resolution,
                 **self.actors_dict["director"]["mesh_kwargs"]
             ),
-            slice_name="slice_plane"
+            slice_name="director_slice_plane"
         )
         # def director_slice_func(normal, origin):
         #     """make glyph plot and transparent plane for director field slice"""
@@ -1104,7 +1103,12 @@ class ViewMinPlot(BackgroundPlotter):
         for key in kwargs.keys():
             actor_dict["mesh_kwargs"][key] = kwargs[key]
 
+        self.add_if_dict_lacks(
+            actor_dict["mesh_kwargs"],
+            self.settings["default_mesh_kwargs"]
+        )
 
+        # create or update the actor
         actor_dict["actor"] = self.add_mesh(
             actor_dict["filter"](**actor_dict["filter_kwargs"]),
             **actor_dict["mesh_kwargs"]
@@ -1122,9 +1126,53 @@ class ViewMinPlot(BackgroundPlotter):
                 scalar_bar.SetVisibility(sb_vis)
 
 
+        actor = actor_dict['actor']
+        self.set_actors_visibility(actor, visibility)
+        if type(actor) is list:
+            for sub_actor in actor:
+                sub_actor_name = self.get_actor_name(sub_actor)
+                self.relink_visibility_checkbox(sub_actor_name)
+        else:
+            self.relink_visibility_checkbox(actor_name)
+        # if type(actors) is not list:
+        #     actors = [actors]
+        #
+        # for actor in actors:
+        #     sub_actor_name = self.get_actor_name(actor)
+        #     self.set_actors_visibility(actor, visibility)
+        #     # actor.SetVisibility(visibility)
+        #     self.relink_visibility_checkbox(actor_name)
 
-        self.renderer.actors[actor_name].SetVisibility(visibility)
-        self.relink_visibility_checkbox(actor_name)
+
+    def remove_actor_completely(self, actor_name):
+        if actor_name in self.colorbars.keys():
+            self.remove_scalar_bar(self.colorbars[actor_name])
+        if actor_name in self.toolbars.keys():
+            self.app_window.removeToolBar(self.toolbars[actor_name])
+        if actor_name in self.actors_dict.keys():
+            del self.actors_dict[actor_name]
+        if actor_name in self.visibility_checkboxes.keys():
+            del self.visibility_checkboxes[actor_name]
+        if actor_name in self.QSliders.keys():
+            del self.QSliders[actor_name]
+        if actor_name in self.QSliders_labels.keys():
+            del self.QSliders_labels[actor_name]
+        if actor_name in self.QSliders_input_boxes.keys():
+            del self.QSliders_input_boxes[actor_name]
+        if actor_name in self.colors.keys():
+            del self.colors[actor_name]
+        if actor_name in self.refresh_functions.keys():
+            del self.refresh_functions[actor_name]
+        if actor_name in self.viscolor_toolbars.keys():
+            del self.viscolor_toolbars[actor_name]
+        if actor_name in self.renderer.actors.keys():
+            self.remove_actor(actor_name)
+
+    def get_actor_name(self, actor):
+        for key in self.renderer.actors.keys():
+            if self.renderer.actors[key] is actor:
+                return key
+
 
     def get_actor_dict(self, actor_name):
         if not actor_name in self.actors_dict.keys():
@@ -1135,6 +1183,13 @@ class ViewMinPlot(BackgroundPlotter):
                 filter_kwargs = dict()
             )
         return self.actors_dict[actor_name]
+
+
+    def set_actors_visibility(self, actor_or_actors, visibility):
+        if type(actor_or_actors) is not list:
+            actor_or_actors = [actor_or_actors]
+        for actor in actor_or_actors:
+            actor.SetVisibility(visibility)
 
     def update_isosurface(self, actor_name, dataset_name = None, contour_values=None, **contour_kwargs):
 
@@ -1590,12 +1645,25 @@ class ViewMinPlot(BackgroundPlotter):
                 colorbar = self.scalar_bars[self.colorbars[actor_name]]
                 colorbar.SetVisibility(1-colorbar.GetVisibility())
 
+        def remove_choice():
+            self.remove_actor_completely(actor_name)
+            # qm = qw.QMessageBox()
+            # qm.setText(f'Are you sure you want to completely remove \'{actor_name}\'?')
+            # qm.setInformativeText('This action cannot be undone.')
+            # qm.setStandardButtons(qm.Yes, qm.Cancel)
+            # qm.show()
+            # button_choice = qm.exec_()
+            # print(button_choice)
+                # self.remove_actor_completely()
+            # qm.buttonClicked.connect(remove_choice_confirmation)
+
+
         cb_children = [
-            lambda: None, color_picker_choice, color_array_choice, toggle_colorbar_choice, set_opacity_choice
+            lambda: None, color_picker_choice, color_array_choice, toggle_colorbar_choice, set_opacity_choice, remove_choice
         ]
         cb_parent = qw.QComboBox()
         cb_parent.setMaximumWidth(60)
-        cb_parent.addItems(["🎨", "solid color", "color array", "show/hide colorbar", "set opacity"])
+        cb_parent.addItems(["🎨", "solid color", "color array", "show/hide colorbar", "set opacity", "remove"])
         cb_parent.setCurrentIndex(0)
         cb_parent.setToolTip('Color options for \"' + actor_name + "\"")
         def index_change_callback(choice_num):
